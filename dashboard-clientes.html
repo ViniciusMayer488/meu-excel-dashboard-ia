@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Dashboard de Clientes</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+:root{--bg:#f4f6fa;--card:#fff;--tx:#1d2433;--mu:#667085;--ln:#e4e7ec;--ac:#2f6fed;--ac2:#eaf1ff;color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f141c;--card:#171e29;--tx:#e8ecf3;--mu:#98a2b3;--ln:#2a3345;--ac:#5b8def;--ac2:#1b2740;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0f141c;--card:#171e29;--tx:#e8ecf3;--mu:#98a2b3;--ln:#2a3345;--ac:#5b8def;--ac2:#1b2740;color-scheme:dark}
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*::before,*::after{box-sizing:inherit}
+body{margin:0;background:var(--bg);color:var(--tx);font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.4}
+.w{max-width:1180px;margin:0 auto;padding:20px 16px 40px}
+h1{margin:0;font-size:24px}h2{margin:26px 0 10px;font-size:16px}
+.sub{color:var(--mu);margin:4px 0 0}
+.bar{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0 6px;align-items:center}
+.bar .sp{flex:1}
+button,.btn{font:inherit;border:1px solid var(--ln);background:var(--card);color:var(--tx);padding:8px 14px;border-radius:8px;cursor:pointer}
+button.p,.btn.p{background:var(--ac);border-color:var(--ac);color:#fff}
+button:disabled{opacity:.45;cursor:not-allowed}
+#msg{min-height:20px;color:var(--mu);font-size:13px}#msg.err{color:#e5484d}
+.g{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px}
+.k{background:var(--card);border:1px solid var(--ln);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:2px}
+.k span{color:var(--mu);font-size:12px}.k b{font-size:18px}.k i{font-style:normal;color:var(--mu);font-size:12px}
+.cg{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:12px}
+.c{background:var(--card);border:1px solid var(--ln);border-radius:10px;padding:14px}
+.c h3{margin:0 0 10px;font-size:14px}.cv{position:relative;height:280px}
+.tw{background:var(--card);border:1px solid var(--ln);border-radius:10px;overflow-x:auto}
+table{border-collapse:collapse;width:100%;min-width:560px}
+th,td{padding:9px 12px;text-align:left;border-bottom:1px solid var(--ln)}
+th{background:var(--ac2);font-size:12px;text-transform:uppercase;letter-spacing:.03em}
+td.r,th.r{text-align:right}
+</style>
+</head>
+<body>
+<div class="w">
+<h1>Dashboard de Clientes</h1>
+<p class="sub" id="src"></p>
+<div class="bar">
+<label class="btn p" for="file">Importar Excel / CSV</label>
+<input type="file" id="file" accept=".xlsx,.xls,.csv" hidden>
+<button id="demo">Dados de exemplo</button>
+<span class="sp"></span>
+<button id="bpdf" disabled>Salvar PDF</button>
+<button id="bcsv" disabled>Salvar CSV</button>
+<button id="bdoc" disabled>Salvar Word</button>
+</div>
+<div id="msg" role="status"></div>
+<h2>Estatísticas de preços</h2><div class="g" id="kp"></div>
+<h2>Estatísticas de datas</h2><div class="g" id="kd"></div>
+<h2>Gráficos</h2>
+<div class="cg">
+<div class="c"><h3>Valor por cliente</h3><div class="cv"><canvas id="c1"></canvas></div></div>
+<div class="c"><h3>Valor por data</h3><div class="cv"><canvas id="c2"></canvas></div></div>
+<div class="c"><h3>Distribuição por faixa de preço</h3><div class="cv"><canvas id="c3"></canvas></div></div>
+<div class="c"><h3>Faturamento por mês</h3><div class="cv"><canvas id="c4"></canvas></div></div>
+</div>
+<h2>Dados</h2>
+<div class="tw"><table><thead><tr><th>ID</th><th>Nome</th><th>Produto</th><th class="r">Valor</th><th>Data</th></tr></thead><tbody id="tb"></tbody></table></div>
+</div>
+<script>
+const SAMPLE=[["Ana Beatriz Souza","Notebook Dell Inspiron",3899.9,"2026-09-02"],["Carlos Eduardo Lima","Smartphone Samsung Galaxy A55",2199,"2026-09-04"],["Mariana Oliveira","Fone Bluetooth JBL",349.9,"2026-09-07"],["João Pedro Santos","Monitor LG 24\"",899,"2026-09-09"],["Fernanda Costa","Teclado Mecânico Redragon",289.9,"2026-09-12"],["Rafael Almeida","Mouse Gamer Logitech",179.9,"2026-09-14"],["Juliana Pereira","Cadeira Ergonômica",1250,"2026-09-16"],["Lucas Ferreira","SSD 1TB Kingston",429,"2026-09-18"],["Patrícia Rodrigues","Webcam Full HD",219.9,"2026-09-21"],["Bruno Carvalho","Tablet Lenovo Tab M10",1099,"2026-09-23"],["Camila Ribeiro","Impressora HP Multifuncional",799,"2026-09-25"],["Diego Martins","Roteador Wi-Fi 6 TP-Link",359.9,"2026-09-28"],["Larissa Gomes","Smart TV 43\" Philips",2049,"2026-10-01"],["Thiago Barbosa","Caixa de Som Bluetooth",259.9,"2026-10-03"],["Vanessa Araújo","HD Externo 2TB Seagate",489,"2026-10-06"]];
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const brl=n=>n.toLocaleString("pt-BR",{style:"currency",currency:"BRL"}).replace(/\u00a0/g," ");
+const fdate=t=>t==null?"-":new Date(t).toLocaleDateString("pt-BR",{timeZone:"UTC"});
+const mlabel=(k,long)=>{const d=Date.UTC(+k.slice(0,4),+k.slice(5,7)-1,1);return long?new Date(d).toLocaleDateString("pt-BR",{month:"long",year:"numeric",timeZone:"UTC"}):new Date(d).toLocaleDateString("pt-BR",{month:"short",year:"2-digit",timeZone:"UTC"}).replace(" de ","/").replace(".","")};
+let rows=[],charts=[],dl=null;
+function msg(t,err){const m=$("msg");m.textContent=t;m.className=err?"err":""}
+function pNum(v){if(typeof v==="number")return v;let s=String(v).replace(/[^\d,.\-]/g,"");if(s.includes(",")&&s.includes("."))s=s.replace(/\./g,"").replace(",",".");else if(s.includes(","))s=s.replace(",",".");return parseFloat(s)}
+function pDate(v){if(v instanceof Date&&!isNaN(v))return Math.round(v.getTime()/864e5)*864e5;if(typeof v==="number"&&v>20000&&v<80000)return (Math.floor(v)-25569)*864e5;if(typeof v==="string"){v=v.trim();let m=v.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})/);if(m){let y=+m[3];if(y<100)y+=2000;return Date.UTC(y,m[2]-1,+m[1])}m=v.match(/^(\d{4})-(\d{2})-(\d{2})/);if(m)return Date.UTC(+m[1],m[2]-1,+m[3])}return null}
+const norm=s=>String(s).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim();
+function build(json){const out=[];json.forEach((r,i)=>{const m={};for(const k in r)m[norm(k)]=r[k];const pick=(...ks)=>{for(const k of ks)if(m[k]!==undefined&&m[k]!=="")return m[k];return ""};const valor=pNum(pick("valor","preco","valor total","total","price"));if(isNaN(valor))return;out.push({id:pick("id","codigo")||i+1,nome:String(pick("nome","cliente")),produto:String(pick("produto","item")),valor,data:pDate(pick("data","date","data da compra"))})});return out}
+function parseCSV(t){const l=t.split(/\r?\n/)[0]||"";const s=l.split(";").length>l.split(",").length?";":",";const out=[];let row=[],f="",q=false;for(let i=0;i<t.length;i++){const c=t[i];if(q){if(c==='"'){if(t[i+1]==='"'){f+='"';i++}else q=false}else f+=c}else if(c==='"')q=true;else if(c===s){row.push(f);f=""}else if(c==="\n"){row.push(f.replace(/\r$/,""));out.push(row);row=[];f=""}else f+=c}if(f||row.length){row.push(f);out.push(row)}const h=out.shift()||[];return out.filter(r=>r.some(x=>x!=="")).map(r=>Object.fromEntries(h.map((k,i)=>[k,r[i]??""])))}
+function computeStats(){const v=rows.map(r=>r.valor),n=v.length,sum=v.reduce((a,b)=>a+b,0),mean=sum/n,s=[...v].sort((a,b)=>a-b),med=n%2?s[(n-1)/2]:(s[n/2-1]+s[n/2])/2,sd=n>1?Math.sqrt(v.reduce((a,b)=>a+(b-mean)**2,0)/(n-1)):0,mx=rows.reduce((a,b)=>b.valor>a.valor?b:a),mn=rows.reduce((a,b)=>b.valor<a.valor?b:a);
+const price=[["Total",brl(sum)],["Ticket médio",brl(mean)],["Mediana",brl(med)],["Maior valor",brl(mx.valor),mx.nome],["Menor valor",brl(mn.valor),mn.nome],["Desvio padrão",brl(sd)],["Registros",String(n)]];
+const dr=rows.filter(r=>r.data!=null);let date=[];
+if(dr.length){const ts=dr.map(r=>r.data),a=ts.reduce((x,y)=>Math.min(x,y)),b=ts.reduce((x,y)=>Math.max(x,y)),days=Math.round((b-a)/864e5),du=new Set(ts).size,mo={},wd={};
+dr.forEach(r=>{const k=new Date(r.data).toISOString().slice(0,7);mo[k]=(mo[k]||0)+r.valor;const w=new Date(r.data).getUTCDay();wd[w]=(wd[w]||0)+1});
+const top=Object.entries(mo).sort((x,y)=>y[1]-x[1])[0],wt=Object.entries(wd).sort((x,y)=>y[1]-x[1])[0],WD=["domingo","segunda","terça","quarta","quinta","sexta","sábado"];
+date=[["Primeira data",fdate(a)],["Última data",fdate(b)],["Período",days+" dias"],["Intervalo médio",du>1?(days/(du-1)).toFixed(1).replace(".",",")+" dias":"-"],["Mês de maior faturamento",mlabel(top[0],1),brl(top[1])],["Dia com mais compras",WD[wt[0]],wt[1]+" compras"]]}
+return{price,date}}
+const kHtml=a=>a.map(x=>`<div class="k"><span>${esc(x[0])}</span><b>${esc(x[1])}</b>${x[2]?`<i>${esc(x[2])}</i>`:""}</div>`).join("")||'<div class="k"><span>Sem datas válidas na planilha</span></div>';
+function drawCharts(light){charts.forEach(c=>c.destroy());charts=[];
+const dark=!light&&matchMedia("(prefers-color-scheme: dark)").matches,gr=dark?"#2a3345":"#e4e7ec";
+Chart.defaults.color=dark?"#cbd5e1":"#475467";Chart.defaults.font.family="Arial, sans-serif";
+const bgp={id:"bg",beforeDraw(c){if(!light)return;const x=c.ctx;x.save();x.fillStyle="#fff";x.fillRect(0,0,c.width,c.height);x.restore()}};
+const P=["#2f6fed","#12a594","#f5a524","#e5484d","#8e4ec6","#30a46c"];
+const ax={x:{grid:{color:gr}},y:{grid:{color:gr},ticks:{callback:v=>brl(v)}}};
+const mk=(id,type,labels,data,extra)=>charts.push(new Chart($(id),{type,data:{labels,datasets:[Object.assign({data},extra)]},plugins:[bgp],options:{responsive:true,maintainAspectRatio:false,animation:light?false:{duration:400},plugins:{legend:{display:type==="doughnut",position:"bottom"},tooltip:{callbacks:{label:c=>" "+(type==="doughnut"?c.label.split(" ")[0]+" "+c.raw+" cliente(s)":brl(c.raw))}}},scales:type==="doughnut"?{}:ax}}));
+const sh=n=>{const p=n.split(" ");return p.length>1?p[0]+" "+p[p.length-1][0]+".":n};
+mk("c1","bar",rows.map(r=>sh(r.nome)||String(r.id)),rows.map(r=>r.valor),{backgroundColor:P[0],borderRadius:4});
+const dm={};rows.forEach(r=>{if(r.data!=null)dm[r.data]=(dm[r.data]||0)+r.valor});const dk=Object.keys(dm).map(Number).sort((a,b)=>a-b);
+mk("c2","line",dk.map(t=>new Date(t).toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit",timeZone:"UTC"})),dk.map(t=>dm[t]),{borderColor:P[1],backgroundColor:P[1]+"33",fill:true,tension:.3,pointRadius:3});
+const vs=rows.map(r=>r.valor),lo=Math.min(...vs),hi=Math.max(...vs),w=(hi-lo)/4||1,bins=[0,0,0,0],f=n=>"R$ "+Math.round(n).toLocaleString("pt-BR");
+vs.forEach(x=>{bins[Math.min(3,Math.floor((x-lo)/w))]++});
+mk("c3","doughnut",bins.map((_,i)=>f(lo+w*i)+" a "+f(lo+w*(i+1))),bins,{backgroundColor:P.slice(0,4),borderWidth:0});
+const mo={};rows.forEach(r=>{if(r.data!=null){const k=new Date(r.data).toISOString().slice(0,7);mo[k]=(mo[k]||0)+r.valor}});const mk2=Object.keys(mo).sort();
+mk("c4","bar",mk2.map(k=>mlabel(k)),mk2.map(k=>mo[k]),{backgroundColor:P[2],borderRadius:4})}
+function render(){const s=computeStats();$("kp").innerHTML=kHtml(s.price);$("kd").innerHTML=kHtml(s.date);
+$("tb").innerHTML=rows.map(r=>`<tr><td>${esc(r.id)}</td><td>${esc(r.nome)}</td><td>${esc(r.produto)}</td><td class="r">${brl(r.valor)}</td><td>${fdate(r.data)}</td></tr>`).join("");drawCharts(false)}
+function load(data,name){rows=data;$("src").textContent="Fonte: "+name+" · "+data.length+" registros";render()}
+function sample(){load(build(SAMPLE.map((a,i)=>({id:i+1,nome:a[0],produto:a[1],valor:a[2],data:a[3]}))),"dados de exemplo")}
+$("demo").onclick=()=>{sample();msg("Dados de exemplo carregados.")};
+$("file").addEventListener("change",async e=>{const f=e.target.files[0];if(!f)return;
+try{let json;if(/\.csv$/i.test(f.name))json=parseCSV((await f.text()).replace(/^\uFEFF/,""));else{const wb=XLSX.read(await f.arrayBuffer(),{type:"array"});json=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:"",raw:true})}
+const data=build(json);if(!data.length){msg("Não encontrei dados válidos. A planilha precisa de uma coluna Valor (e, de preferência, ID, Nome, Produto e Data).",1);return}
+load(data,f.name);msg("Arquivo importado com sucesso.")}catch(err){msg("Erro ao ler o arquivo: "+err.message,1)}e.target.value=""});
+async function save(filename,data){try{if(!dl)throw{code:"unavailable",message:"download indisponível"};await dl.save({filename,data});msg("Arquivo salvo: "+filename)}catch(e){msg(e&&e.code==="declined"?"Download cancelado.":"Não foi possível salvar: "+((e&&e.message)||"erro"),e&&e.code!=="declined")}}
+function csv(){const q=s=>'"'+String(s).replace(/"/g,'""')+'"';return"\uFEFF"+[["ID","Nome","Produto","Valor","Data"].join(";")].concat(rows.map(r=>[q(r.id),q(r.nome),q(r.produto),r.valor.toFixed(2).replace(".",","),r.data==null?"":fdate(r.data)].join(";"))).join("\r\n")}
+function pdf(){const{jsPDF}=window.jspdf,d=new jsPDF({unit:"mm",format:"a4"}),M=14;let y=18;
+d.setFont("helvetica","bold");d.setFontSize(16);d.text("Dashboard de Clientes",M,y);y+=6;
+d.setFont("helvetica","normal");d.setFontSize(9);d.setTextColor(110);d.text("Gerado em "+new Date().toLocaleDateString("pt-BR")+" - "+rows.length+" registros",M,y);y+=8;d.setTextColor(0);
+const s=computeStats();[[s.price,M,"Estatísticas de preços"],[s.date,M+95,"Estatísticas de datas"]].forEach(([a,x,t])=>{let yy=y;d.setFont("helvetica","bold");d.setFontSize(10);d.text(t,x,yy);yy+=5;d.setFont("helvetica","normal");d.setFontSize(9);a.forEach(i=>{d.text(i[0]+": "+i[1]+(i[2]?" ("+i[2]+")":""),x,yy,{maxWidth:90});yy+=5});if(yy>y+0)y=Math.max(y,yy)});
+const base=y;let ym=base;
+drawCharts(true);const imgs=charts.map(c=>[c.toBase64Image("image/png",1),c.canvas.width/c.canvas.height]);drawCharts(false);
+y+=3;const cw=88;let rowH=0;imgs.forEach((im,i)=>{const h=cw/im[1];if(i%2===0){y+=rowH+(i?4:0);rowH=h;if(y+h>285){d.addPage();y=14}}else rowH=Math.max(rowH,h);d.addImage(im[0],"PNG",M+(i%2)*(cw+6),y,cw,h)});
+y+=rowH+6;d.autoTable({startY:y,head:[["ID","Nome","Produto","Valor","Data"]],body:rows.map(r=>[r.id,r.nome,r.produto,brl(r.valor),fdate(r.data)]),styles:{fontSize:8.5},headStyles:{fillColor:[31,78,120]},columnStyles:{3:{halign:"right"}},margin:{left:M,right:M}});
+return d.output("blob")}
+async function word(){const run=(t,b,sz,col)=>`<w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/>${b?"<w:b/>":""}${col?`<w:color w:val="${col}"/>`:""}<w:sz w:val="${sz||21}"/></w:rPr><w:t xml:space="preserve">${esc(t)}</w:t></w:r>`;
+const para=(t,b,sz)=>`<w:p><w:pPr><w:spacing w:after="80"/></w:pPr>${run(t,b,sz)}</w:p>`,W=[700,2700,3300,1700,1200];
+const cell=(t,i,h,right)=>`<w:tc><w:tcPr><w:tcW w:w="${W[i]}" w:type="dxa"/>${h?'<w:shd w:val="clear" w:color="auto" w:fill="1F4E78"/>':""}</w:tcPr><w:p><w:pPr><w:spacing w:after="0"/>${right?'<w:jc w:val="right"/>':""}</w:pPr>${run(t,h,19,h?"FFFFFF":"")}</w:p></w:tc>`;
+const tr=(a,h)=>`<w:tr>${a.map((t,i)=>cell(String(t),i,h,i===3)).join("")}</w:tr>`,s=computeStats();
+const bd=["top","left","bottom","right","insideH","insideV"].map(n=>`<w:${n} w:val="single" w:sz="4" w:color="BFBFBF"/>`).join("");
+const body=para("Dashboard de Clientes",1,36)+para("Gerado em "+new Date().toLocaleDateString("pt-BR")+" - "+rows.length+" registros")+para("Estatísticas de preços",1,26)+s.price.map(i=>para(i[0]+": "+i[1]+(i[2]?" ("+i[2]+")":""))).join("")+(s.date.length?para("Estatísticas de datas",1,26)+s.date.map(i=>para(i[0]+": "+i[1]+(i[2]?" ("+i[2]+")":""))).join(""):"")+para("Dados",1,26)+`<w:tbl><w:tblPr><w:tblW w:w="9600" w:type="dxa"/><w:tblBorders>${bd}</w:tblBorders><w:tblCellMar><w:left w:w="80" w:type="dxa"/><w:right w:w="80" w:type="dxa"/></w:tblCellMar></w:tblPr>${tr(["ID","Nome","Produto","Valor","Data"],1)}${rows.map(r=>tr([r.id,r.nome,r.produto,brl(r.valor),fdate(r.data)])).join("")}</w:tbl>`;
+const z=new JSZip();
+z.file("[Content_Types].xml",'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>');
+z.file("_rels/.rels",'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>');
+z.file("word/document.xml",'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>'+body+'<w:p/><w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr></w:body></w:document>');
+return z.generateAsync({type:"blob"})}
+$("bcsv").onclick=()=>save("dashboard-clientes.csv",csv());
+$("bpdf").onclick=async()=>{try{await save("dashboard-clientes.pdf",pdf())}catch(e){msg("Erro ao gerar PDF: "+e.message,1)}};
+$("bdoc").onclick=async()=>{try{await save("dashboard-clientes.docx",await word())}catch(e){msg("Erro ao gerar Word: "+e.message,1)}};
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change",()=>rows.length&&drawCharts(false));
+sample();
+if(window.claude&&claude.use)claude.use("downloads").then(x=>{dl=x;["bpdf","bcsv","bdoc"].forEach(id=>{$(id).disabled=!x;if(!x)$(id).title="Download indisponível nesta visualização"})}).catch(()=>{});
+</script>
+</body>
+</html>
